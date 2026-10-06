@@ -113,17 +113,21 @@ def main():
 
     cleanbuild, toolstr = tool_versions(options.tools)
 
-    ver = git_version()
+    # A .version file is a declared version, so it is authoritative and the build
+    # is reproducible. Preferring it to git is what makes the artifact a function
+    # of the source and the toolchain alone: git is not usable in every build
+    # context, and when it is unusable the fallback below stamps the build time
+    # and hostname into the image, so the same commit yielded a different artifact
+    # in each context.
+    pinned = file_version()
+    ver = pinned or git_version()
     cleanbuild = cleanbuild and 'dirty' not in ver
     if not ver:
-        ver = file_version()
-        # We expect the "extra version" to contain information on the
-        # distributor and distribution package version (if
-        # applicable).  It is a "clean" build if this is a build from
-        # an official release tarball and the above info is present.
-        cleanbuild = cleanbuild and ver and options.extra != ""
-        if not ver:
-            ver = "?"
+        ver = "?"
+    if pinned:
+        # The version was declared rather than derived, so treat the build as clean
+        # and leave the timestamp fallback below alone.
+        cleanbuild = True
     if not cleanbuild:
         btime = time.strftime("%Y%m%d_%H%M%S")
         hostname = socket.gethostname()
