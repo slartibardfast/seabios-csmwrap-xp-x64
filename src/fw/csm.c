@@ -206,6 +206,21 @@ handle_csm_0002(struct bregs *regs)
     if (csm_boot_table->MpTable)
         copy_mptable((void *)csm_boot_table->MpTable);
 
+    // Set up the INT 13h CD boot drive emulation before handing control over.
+    //
+    // prepareboot() calls this on the normal BIOS path, but the CSM never runs
+    // prepareboot(): it enters through reloc_preinit(csm_maininit, regs) instead of
+    // reloc_preinit(maininit, NULL), and csm_maininit() calls interface_init() and
+    // pci_probe_devices() only. So this is the sole place it happens on the CSM path.
+    //
+    // Without it the guest gets no INT 13h CD emulation at all. cdrom_prepboot() is
+    // the only setter of CDEmu.media and CDEmu.emulated_drive and it allocates the
+    // bounce buffer, and disk.c gates the whole CD-emulation branch on CDEmu.media,
+    // so an OS booted from a CD issues reads that come back DISK_RET_EPARAM. It
+    // returns early when there is no CD or CONFIG_CDROM_EMU is off, so it is safe
+    // to call unconditionally.
+    cdrom_prepboot();
+
     // Deliberately not enabling the legacy VGA text console here.
     //
     // enable_vga_console() issues INT 10h AX=0003, switching the display to mode 3
