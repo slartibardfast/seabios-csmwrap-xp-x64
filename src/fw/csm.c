@@ -206,8 +206,24 @@ handle_csm_0002(struct bregs *regs)
     if (csm_boot_table->MpTable)
         copy_mptable((void *)csm_boot_table->MpTable);
 
-    // EFI may have reinitialised the video using its *own* driver.
-    enable_vga_console();
+    // Deliberately not enabling the legacy VGA text console here.
+    //
+    // enable_vga_console() issues INT 10h AX=0003, switching the display to mode 3
+    // and redirecting output into the legacy text plane at 0xB8000. On a host whose
+    // only display is a passed-through GPU holding no legacy VGA resources, that
+    // plane is not scanned out, so every later message is written somewhere nothing
+    // displays: the screen stays live and black.
+    //
+    // SeaBIOS has already established a working console by this point. vga_post() has
+    // run and the coreboot framebuffer console is live on the card's own BAR ("Found
+    // FB @ <bar0> <W>x<H> with <N> bpp"), and console output goes there. Re-entering
+    // video init to select mode 3 discards that console in favour of a plane that does
+    // not exist on this host.
+    //
+    // The text console remains correct for every non-CSM caller of this function, so
+    // it is unchanged there; a host that emulates a VGA device alongside a passed
+    // card can restore it at this call site. The CSM path keeps the console its own
+    // firmware handed over.
 
     // EFI fills this in for us. Zero it for now...
     struct bios_data_area_s *bda = MAKE_FLATPTR(SEG_BDA, 0);
